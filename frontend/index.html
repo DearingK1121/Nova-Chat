@@ -1,12 +1,205 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Novachat (TS + Vite)</title>
-  </head>
-  <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.ts"></script>
-  </body>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Nova Chat — AI Assistant</title>
+  <style>
+    :root{
+      --bg:#0b1220; --panel:#0f1724; --muted:#9aa4b2; --accent:#10b981; --glass: rgba(255,255,255,0.02);
+      --radius:12px; --gap:14px; --max-width:1100px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial;color:#e6eef6;background:linear-gradient(180deg,#061122 0%, #071421 100%);}
+    a{color:inherit}
+
+    .wrap{max-width:var(--max-width);margin:28px auto;padding:18px}
+    .app{display:grid;grid-template-columns:260px 1fr;gap:20px;align-items:start}
+
+    /* Sidebar (ChatGPT-like) */
+    .sidebar{background:linear-gradient(180deg,var(--panel), rgba(8,12,18,0.9));padding:16px;border-radius:var(--radius);box-shadow:0 8px 30px rgba(2,6,23,0.6);height:78vh;display:flex;flex-direction:column}
+    .brand{display:flex;gap:12px;align-items:center;margin-bottom:12px}
+    .logo{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,#60a5fa,#7c3aed);display:flex;align-items:center;justify-content:center;font-weight:800;color:white}
+    .brand h1{font-size:16px;margin:0}
+    .brand p{margin:0;font-size:12px;color:var(--muted)}
+
+    .convos{flex:1;overflow:auto;margin-top:12px;display:flex;flex-direction:column;gap:8px}
+    .convo{padding:10px;border-radius:10px;background:transparent;border:1px solid transparent;cursor:pointer;color:var(--muted);}
+    .convo:hover{background:rgba(255,255,255,0.02);border-color:rgba(255,255,255,0.03);color:inherit}
+    .actions{display:flex;gap:8px;margin-top:12px}
+    .btn{padding:8px 10px;border-radius:10px;border:0;background:var(--accent);color:#072018;cursor:pointer}
+    .ghost{background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted)}
+
+    /* Main chat area */
+    .chatcard{background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));padding:18px;border-radius:var(--radius);height:78vh;display:flex;flex-direction:column}
+    .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+    .header .meta{font-size:13px;color:var(--muted)}
+
+    .messages{overflow:auto;flex:1;padding:8px 6px;display:flex;flex-direction:column;gap:12px}
+    .msg{display:flex;gap:12px;align-items:flex-start}
+    .msg.assistant .avatar{background:linear-gradient(135deg,#60a5fa,#7c3aed);}
+    .avatar{width:42px;height:42px;border-radius:10px;background:rgba(255,255,255,0.03);display:flex;align-items:center;justify-content:center;font-weight:700}
+    .bubble{max-width:76%;padding:12px 14px;border-radius:12px;background:linear-gradient(180deg,#071426,#081926);color:#dbeafe;line-height:1.5}
+    .msg.user{justify-content:flex-end}
+    .msg.user .bubble{background:linear-gradient(90deg,var(--accent),#06b6d4);color:#021617}
+
+    /* Composer (like ChatGPT) */
+    .composer{margin-top:14px;border-radius:12px;padding:10px;background:rgba(255,255,255,0.01);display:flex;gap:10px;align-items:flex-end;border:1px solid rgba(255,255,255,0.03)}
+    .composer textarea{flex:1;min-height:56px;max-height:200px;padding:10px;border-radius:8px;border:0;background:transparent;color:inherit;resize:none;font-size:14px}
+    .composer .right{display:flex;flex-direction:column;gap:8px}
+    .small{font-size:13px;color:var(--muted)}
+
+    /* Utilities */
+    .kbd{background:rgba(255,255,255,0.03);padding:4px 8px;border-radius:6px;font-size:12px}
+
+    @media (max-width:900px){.app{grid-template-columns:1fr}.sidebar{order:2;height:auto}.chatcard{order:1;height:72vh}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="app" role="application" aria-label="Nova Chat application">
+
+      <aside class="sidebar" aria-label="Sidebar">
+        <div class="brand">
+          <div class="logo">NC</div>
+          <div>
+            <h1>Nova Chat</h1>
+            <p>AI assistant — Chat-like interface</p>
+          </div>
+        </div>
+
+        <div class="convos" id="convos">
+          <div class="convo">+ Start new chat</div>
+          <div class="convo">Project planning</div>
+          <div class="convo">Code helper</div>
+          <div class="convo">Design ideas</div>
+        </div>
+
+        <div class="actions">
+          <button class="btn" id="newChat">New chat</button>
+          <button class="ghost" id="settings">Settings</button>
+        </div>
+      </aside>
+
+      <main class="chatcard" aria-live="polite">
+        <div class="header">
+          <div>
+            <strong>Nova Chat</strong>
+            <div class="meta small">Model: GPT-3.5 family</div>
+          </div>
+          <div class="meta small">Status: <span id="status">idle</span></div>
+        </div>
+
+        <div id="messages" class="messages" role="log" aria-atomic="false">
+          <!-- messages will be injected here -->
+        </div>
+
+        <div class="composer">
+          <textarea id="input" placeholder="Send a message — press Enter to send (Shift+Enter for newline)"></textarea>
+          <div class="right">
+            <div class="small">Press <span class="kbd">Enter</span> to send</div>
+            <div style="display:flex;gap:8px">
+              <button class="btn" id="send">Send</button>
+              <button class="ghost" id="clear">Clear</button>
+            </div>
+          </div>
+        </div>
+      </main>
+
+    </div>
+  </div>
+
+  <script>
+    // Minimal interactive behavior — keep API calls server-side (do not expose API keys in client code)
+    const messagesEl = document.getElementById('messages');
+    const inputEl = document.getElementById('input');
+    const statusEl = document.getElementById('status');
+
+    let messages = [
+      {role:'assistant', content:'Hello — I\'m Nova Chat. How can I help you today?'}
+    ];
+
+    function render(){
+      messagesEl.innerHTML = '';
+      messages.forEach(m => {
+        const row = document.createElement('div');
+        row.className = 'msg ' + (m.role === 'user' ? 'user' : 'assistant');
+
+        const avatar = document.createElement('div');
+        avatar.className = 'avatar';
+        avatar.textContent = m.role === 'user' ? 'U' : 'N';
+
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+        bubble.innerHTML = escapeHtml(m.content).replace(/</g,'<br>');
+
+        if(m.role === 'user'){
+          row.appendChild(bubble);
+          row.appendChild(avatar);
+        } else {
+          row.appendChild(avatar);
+          row.appendChild(bubble);
+        }
+
+        messagesEl.appendChild(row);
+      });
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function escapeHtml(unsafe){
+      return unsafe
+        .replace(/&/g,'&amp;')
+        .replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;')
+        .replace(/'/g,'&#039;');
+    }
+
+    function addUserMessage(text){
+      messages.push({role:'user', content:text});
+      render();
+    }
+
+    function addAssistantMessage(text){
+      messages.push({role:'assistant', content:text});
+      render();
+    }
+
+    inputEl.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter' && !e.shiftKey){
+        e.preventDefault();
+        const text = inputEl.value.trim();
+        if(!text) return;
+        addUserMessage(text);
+        inputEl.value = '';
+        // simulate sending
+        statusEl.textContent = 'thinking...';
+        setTimeout(()=>{
+          addAssistantMessage('This is a demo reply from Nova Chat. Replace with your server-driven response.');
+          statusEl.textContent = 'idle';
+        }, 700);
+      }
+    });
+
+    document.getElementById('send').addEventListener('click', ()=>{
+      const text = inputEl.value.trim();
+      if(!text) return;
+      addUserMessage(text);
+      inputEl.value = '';
+      statusEl.textContent = 'thinking...';
+      setTimeout(()=>{ addAssistantMessage('Demo reply from Nova Chat.'); statusEl.textContent = 'idle'; }, 700);
+    });
+
+    document.getElementById('clear').addEventListener('click', ()=>{ messages = []; render(); });
+
+    render();
+  </script>
+
+  <!--
+    Notes:
+    - This is a single-file HTML prototype styled to resemble ChatGPT's layout.
+    - To make it functional, implement a secure server endpoint (e.g. /api/chat) that calls OpenAI's Chat Completions with your server-side API key.
+    - Keep keys off the client. Add rate limits, input validation, and authentication before deploying.
+  -->
+</body>
 </html>
