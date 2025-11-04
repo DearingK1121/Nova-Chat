@@ -19,6 +19,7 @@
     "dotenv": "^16.0.3",
     "express": "^4.18.2",
     "openai": "^4.9.0",
+    "bcryptjs": "^2.4.3",
     "uuid": "^9.0.0"
   },
   "devDependencies": {
@@ -29,7 +30,8 @@
     "vite": "^5.2.0",
     "concurrently": "^8.2.0",
     "@types/cors": "^2.8.12",
-    "@types/cookie-parser": "^1.4.3"
+    "@types/cookie-parser": "^1.4.3",
+    "@types/bcryptjs": "^2.4.2"
   },
   "engines": {
     "node": ">=18"

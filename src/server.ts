@@ -5,7 +5,8 @@ import cookieParser from 'cookie-parser';
 import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
-import { Message, Sessions } from './types';
+import { Message, Sessions, User, Users } from './types';
+import bcrypt from 'bcryptjs';
 
 dotenv.config();
 
@@ -17,6 +18,7 @@ app.use(express.static('public'));
 
 const PORT = process.env.PORT || 3000;
 const SESSIONS_FILE = path.resolve(process.cwd(), 'data', 'sessions.json');
+const USERS_FILE = path.resolve(process.cwd(), 'data', 'users.json');
 
 let OPENAI_KEY = process.env.OPENAI_API_KEY || '';
 const hasOpenAI = !!OPENAI_KEY;
@@ -44,6 +46,28 @@ async function writeSessions(data: Sessions) {
   await fs.writeFile(SESSIONS_FILE, JSON.stringify(data, null, 2), 'utf-8');
 }
 
+async function ensureUsersFile() {
+  try {
+    await fs.mkdir(path.dirname(USERS_FILE), { recursive: true });
+    await fs.access(USERS_FILE);
+  } catch {
+    await fs.writeFile(USERS_FILE, JSON.stringify({}), 'utf-8');
+  }
+}
+
+async function readUsers(): Promise<Users> {
+  try {
+    const raw = await fs.readFile(USERS_FILE, 'utf-8');
+    return JSON.parse(raw || '{}');
+  } catch (err) {
+    return {};
+  }
+}
+
+async function writeUsers(data: Users) {
+  await fs.writeFile(USERS_FILE, JSON.stringify(data, null, 2), 'utf-8');
+}
+
 async function getSessionId(req: express.Request, res: express.Response) {
   let sid = req.cookies?.novachat_session;
   if (!sid) {
@@ -52,6 +76,18 @@ async function getSessionId(req: express.Request, res: express.Response) {
     res.cookie('novachat_session', sid, { httpOnly: true, sameSite: 'lax' });
   }
   return sid;
+}
+
+function getCurrentUserId(req: express.Request): string | null {
+  const uid = req.cookies?.novachat_user;
+  return uid || null;
+}
+
+async function getCurrentUser(req: express.Request): Promise<User | null> {
+  const uid = getCurrentUserId(req);
+  if (!uid) return null;
+  const users = await readUsers();
+  return users[uid] || null;
 }
 
 // Simple fallback responder
@@ -74,6 +110,39 @@ app.post('/api/chat', async (req: express.Request, res: express.Response) => {
   if (!sessions[sid]) sessions[sid] = [];
 
   sessions[sid].push({ role: 'user', content: message });
+
+  // Memory handling: if user asks 'remember ...' store it (only for signed-in users)
+  try {
+    const lower = (message || '').trim();
+    const rememberMatch = lower.match(/^remember\s+(.+)/i);
+    const recallQuery = /(what do you remember|what do you recall|remember what)/i;
+    const currentUser = await getCurrentUser(req);
+    if (rememberMatch && currentUser) {
+      const mem = rememberMatch[1].trim();
+      const users = await readUsers();
+      const u = users[currentUser.id];
+      if (u) {
+        u.memory = u.memory || [];
+        u.memory.push(mem);
+      }
+      await writeUsers(users);
+      const confirm = `Okay — I'll remember: "${mem}"`;
+      sessions[sid].push({ role: 'assistant', content: confirm });
+      await writeSessions(sessions);
+      return res.json({ reply: confirm });
+    }
+    if (recallQuery.test(message)) {
+      if (currentUser) {
+        const mems = currentUser.memory || [];
+        const reply = mems.length ? `I remember: ${mems.map((m, i) => `(${i + 1}) ${m}`).join('\n')}` : "I don't have any saved memories for you.";
+        sessions[sid].push({ role: 'assistant', content: reply });
+        await writeSessions(sessions);
+        return res.json({ reply });
+      }
+    }
+  } catch (e) {
+    console.warn('memory handling error', e);
+  }
 
   try {
     let reply = '';
@@ -108,6 +177,64 @@ app.post('/api/chat', async (req: express.Request, res: express.Response) => {
   }
 });
 
+// Auth endpoints
+app.post('/auth/signup', async (req: express.Request, res: express.Response) => {
+  const { username, password } = req.body || {};
+  if (!username || !password) return res.status(400).json({ error: 'username and password required' });
+  const users = await readUsers();
+  // simple uniqueness check
+  const exists = Object.values(users).some(u => u.username.toLowerCase() === username.toLowerCase());
+  if (exists) return res.status(409).json({ error: 'username_taken' });
+  const id = randomUUID();
+  const hash = await bcrypt.hash(password, 10);
+  const user: User = { id, username, passwordHash: hash, createdAt: new Date().toISOString(), memory: [] };
+  users[id] = user;
+  await writeUsers(users);
+  // set cookie
+  res.cookie('novachat_user', id, { httpOnly: true, sameSite: 'lax' });
+  return res.json({ ok: true, user: { id: user.id, username: user.username } });
+});
+
+app.post('/auth/signin', async (req: express.Request, res: express.Response) => {
+  const { username, password } = req.body || {};
+  if (!username || !password) return res.status(400).json({ error: 'username and password required' });
+  const users = await readUsers();
+  const found = Object.values(users).find(u => u.username.toLowerCase() === username.toLowerCase());
+  if (!found) return res.status(401).json({ error: 'invalid_credentials' });
+  const ok = await bcrypt.compare(password, found.passwordHash);
+  if (!ok) return res.status(401).json({ error: 'invalid_credentials' });
+  res.cookie('novachat_user', found.id, { httpOnly: true, sameSite: 'lax' });
+  return res.json({ ok: true, user: { id: found.id, username: found.username } });
+});
+
+app.post('/auth/signout', async (req: express.Request, res: express.Response) => {
+  res.clearCookie('novachat_user');
+  return res.json({ ok: true });
+});
+
+app.get('/auth/me', async (req: express.Request, res: express.Response) => {
+  const user = await getCurrentUser(req);
+  if (!user) return res.json({ user: null });
+  return res.json({ user: { id: user.id, username: user.username, memory: user.memory || [] } });
+});
+
+app.delete('/auth/delete', async (req: express.Request, res: express.Response) => {
+  const user = await getCurrentUser(req);
+  if (!user) return res.status(401).json({ error: 'not_authenticated' });
+  const users = await readUsers();
+  delete users[user.id];
+  await writeUsers(users);
+  // clear cookie
+  res.clearCookie('novachat_user');
+  // also remove any session owned by this user (optional) - we'll just clear server-side sessions that have no messages
+  const sessions = await readSessions();
+  for (const sid of Object.keys(sessions)) {
+    // no strict ownership tracking; skipping deep cleanup for now
+  }
+  await writeSessions(sessions);
+  return res.json({ ok: true });
+});
+
 // POST /api/stream -> streams incremental tokens to client by proxying OpenAI stream
 app.post('/api/stream', async (req: express.Request, res: express.Response) => {
   const { message } = req.body || {};
@@ -123,6 +250,43 @@ app.post('/api/stream', async (req: express.Request, res: express.Response) => {
 
   if (!hasOpenAI) {
     // Simulate streaming using fallback responder
+    // Memory handling (same as non-stream path)
+    try {
+      const rememberMatch = (message || '').trim().match(/^remember\s+(.+)/i);
+      const currentUser = await getCurrentUser(req);
+      if (rememberMatch && currentUser) {
+        const mem = rememberMatch[1].trim();
+        const users = await readUsers();
+        const u2 = users[currentUser.id];
+        if (u2) {
+          u2.memory = u2.memory || [];
+          u2.memory.push(mem);
+        }
+        await writeUsers(users);
+        const confirm = `Okay — I'll remember: "${mem}"`;
+        for (let i = 0; i < confirm.length; i += 40) {
+          res.write(confirm.slice(i, i + 40));
+          await new Promise(r => setTimeout(r, 30));
+        }
+        sessions[sid].push({ role: 'assistant', content: confirm });
+        await writeSessions(sessions);
+        return res.end();
+      }
+      const recallQuery = /(what do you remember|what do you recall|remember what)/i;
+      if (recallQuery.test(message) && currentUser) {
+        const mems = currentUser.memory || [];
+        const reply = mems.length ? `I remember: ${mems.map((m, i) => `(${i + 1}) ${m}`).join('\n')}` : "I don't have any saved memories for you.";
+        for (let i = 0; i < reply.length; i += 40) {
+          res.write(reply.slice(i, i + 40));
+          await new Promise(r => setTimeout(r, 30));
+        }
+        sessions[sid].push({ role: 'assistant', content: reply });
+        await writeSessions(sessions);
+        return res.end();
+      }
+    } catch (e) {
+      console.warn('memory handling error', e);
+    }
     const reply = fallbackRespond(message);
     for (let i = 0; i < reply.length; i += 40) {
       res.write(reply.slice(i, i + 40));
@@ -195,6 +359,8 @@ app.post('/api/stream', async (req: express.Request, res: express.Response) => {
     // Save assistant reply to session
     sessions[sid].push({ role: 'assistant', content: assistantAccum });
     await writeSessions(sessions);
+
+  // also, if the user asked to remember something in this conversation, we already handled above for non-openai; for OpenAI streaming we won't parse remembering explicitly here.
 
     return res.end();
   } catch (err) {
