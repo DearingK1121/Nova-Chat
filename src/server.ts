@@ -28,7 +28,7 @@ const app = express();
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
-app.use(express.static('public'));
+app.use(express.static('index.html'));
 
 const PORT = process.env.PORT || 3000;
 const SESSIONS_FILE = path.resolve(process.cwd(), 'data', 'sessions.json');
