@@ -8,7 +8,10 @@ import path from 'path';
 import { Message, Sessions, User, Users } from './types';
 import bcrypt from 'bcryptjs';
 
-dotenv.config();
+// Load environment variables. Many users keep .env in the project root, but
+// if your .env is inside `src/` (as in your setup), prefer that path so the
+// dev server picks up the key correctly.
+dotenv.config({ path: path.resolve(process.cwd(), 'src', '.env') });
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
