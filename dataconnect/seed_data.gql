@@ -1,0 +1,44 @@
+mutation CreateDemoData @transaction @auth(level: USER, insecureReason: "This operation is safe to expose to all logged in users.") {
+  user_insertMany(data: [
+    {
+      id: "550e8400-e29b-41d4-a716-446655440000",
+      displayName: "demouser1",
+      createdAt: "2024-03-15T12:00:00Z"
+    },
+    {
+      id: "550e8400-e29b-41d4-a716-446655440001",
+      displayName: "demouser2",
+      createdAt: "2024-03-15T12:00:00Z"
+    }
+  ])
+  chatSession_insertMany(data: [
+    {
+      id: "650e8400-e29b-41d4-a716-446655440002",
+      userId: "550e8400-e29b-41d4-a716-446655440000",
+      createdAt: "2024-03-15T12:00:00Z"
+      name: "Demo Chat 1"
+    },
+    {
+      id: "750e8400-e29b-41d4-a716-446655440003",
+      userId: "550e8400-e29b-41d4-a716-446655440001",
+      createdAt: "2024-03-15T12:00:00Z"
+      name: "Demo Chat 2"
+    }
+  ])
+  message_insertMany(data: [
+    {
+      id: "850e8400-e29b-41d4-a716-446655440004",
+      chatSessionId: "650e8400-e29b-41d4-a716-446655440002",
+      content: "Example message from demouser1",
+      createdAt: "2024-03-15T12:00:00Z",
+      sender: "demouser1"
+    },
+    {
+      id: "950e8400-e29b-41d4-a716-446655440005",
+      chatSessionId: "750e8400-e29b-41d4-a716-446655440003",
+      content: "Example message from demouser2",
+      createdAt: "2024-03-15T12:00:00Z",
+      sender: "demouser2"
+    }
+  ])
+}

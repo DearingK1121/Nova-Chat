@@ -1,0 +1,24 @@
+mutation CreateUserMutation($displayName: String!, $email: String, $photoUrl: String) @auth(level: USER) {
+  user_insert(data: { displayName: $displayName, email: $email, photoUrl: $photoUrl, createdAt_expr: "request.time" })
+}
+
+query GetChatSessionsForUser @auth(level: USER) {
+  chatSessions(where: { userId: { eq_expr: "auth.uid" } }) {
+    id
+    name
+    createdAt
+  }
+}
+
+mutation CreateMessageMutation($chatSessionId: UUID!, $content: String!, $sender: String!) @auth(level: USER) {
+  message_insert(data: { chatSessionId: $chatSessionId, content: $content, sender: $sender, createdAt_expr: "request.time" })
+}
+
+query GetMessagesForChatSession($chatSessionId: UUID!) @auth(level: USER) {
+  messages(where: { chatSessionId: { eq: $chatSessionId } }) {
+    id
+    content
+    sender
+    createdAt
+  }
+}
