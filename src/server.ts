@@ -36,6 +36,7 @@ const USERS_FILE = path.resolve(process.cwd(), 'data', 'users.json');
 
 let OPENAI_KEY = process.env.OPENAI_API_KEY || '';
 const hasOpenAI = !!OPENAI_KEY;
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-3.5-turbo';
 
 // Ensure sessions dir/file exists
 async function ensureSessionsFile() {
@@ -168,7 +169,7 @@ app.post('/api/chat', async (req: express.Request, res: express.Response) => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${OPENAI_KEY}`
         },
-        body: JSON.stringify({ model: 'gpt-3.5-turbo', messages: sessions[sid].map(m => ({ role: m.role, content: m.content })), temperature: 0.7, max_tokens: 600 })
+        body: JSON.stringify({ model: OPENAI_MODEL, messages: sessions[sid].map(m => ({ role: m.role, content: m.content })), temperature: 0.7, max_tokens: 600 })
       });
       if (!resp.ok) {
         const txt = await resp.text();
@@ -319,7 +320,7 @@ app.post('/api/stream', async (req: express.Request, res: express.Response) => {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${OPENAI_KEY}`
       },
-      body: JSON.stringify({ model: 'gpt-3.5-turbo', messages: sessions[sid].map(m => ({ role: m.role, content: m.content })), temperature: 0.7, max_tokens: 600, stream: true })
+      body: JSON.stringify({ model: OPENAI_MODEL, messages: sessions[sid].map(m => ({ role: m.role, content: m.content })), temperature: 0.7, max_tokens: 600, stream: true })
     });
 
     if (!resp.ok || !resp.body) {
