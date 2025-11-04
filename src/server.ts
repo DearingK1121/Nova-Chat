@@ -33,6 +33,7 @@ app.use(express.static('public'));
 const PORT = process.env.PORT || 3000;
 const SESSIONS_FILE = path.resolve(process.cwd(), 'data', 'sessions.json');
 const USERS_FILE = path.resolve(process.cwd(), 'data', 'users.json');
+const PREFS_FILE = path.resolve(process.cwd(), 'data', 'session_prefs.json');
 
 let OPENAI_KEY = process.env.OPENAI_API_KEY || '';
 const hasOpenAI = !!OPENAI_KEY;
@@ -68,6 +69,28 @@ async function ensureUsersFile() {
   } catch {
     await fs.writeFile(USERS_FILE, JSON.stringify({}), 'utf-8');
   }
+}
+
+async function ensurePrefsFile() {
+  try {
+    await fs.mkdir(path.dirname(PREFS_FILE), { recursive: true });
+    await fs.access(PREFS_FILE);
+  } catch {
+    await fs.writeFile(PREFS_FILE, JSON.stringify({}), 'utf-8');
+  }
+}
+
+async function readPrefs(): Promise<Record<string, any>> {
+  try {
+    const raw = await fs.readFile(PREFS_FILE, 'utf-8');
+    return JSON.parse(raw || '{}');
+  } catch (err) {
+    return {};
+  }
+}
+
+async function writePrefs(data: Record<string, any>) {
+  await fs.writeFile(PREFS_FILE, JSON.stringify(data, null, 2), 'utf-8');
 }
 
 async function readUsers(): Promise<Users> {
@@ -160,19 +183,38 @@ app.post('/api/chat', async (req: express.Request, res: express.Response) => {
   }
 
   try {
+    // enforce simple per-session rate limit (e.g., 200 requests per 24h)
+    const prefs = await readPrefs();
+    const pref = prefs[sid] || { requests: [] };
+    const now = Date.now();
+    const windowMs = 24 * 60 * 60 * 1000;
+    pref.requests = (pref.requests || []).filter((t: number) => now - t < windowMs);
+    const limit = parseInt(process.env.SESSION_DAILY_LIMIT || '200', 10);
+    if (pref.requests.length >= limit) {
+      return res.status(429).json({ error: 'rate_limited', detail: 'session daily limit reached' });
+    }
+    pref.requests.push(now);
+    prefs[sid] = pref;
+    await writePrefs(prefs);
+
+    // respect session preferred model if present
+    const prefsAll = await readPrefs();
+    const sessionPref = prefsAll[sid] || {};
+      const modelToUse = sessionPref.model || OPENAI_MODEL; // Use session's model if available
+
     let reply = '';
     if (hasOpenAI) {
-      // Use OpenAI API (non-streaming)
+      // Use OpenAI API (non-streaming) via fetch
       const resp = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${OPENAI_KEY}`
         },
-        body: JSON.stringify({ model: OPENAI_MODEL, messages: sessions[sid].map(m => ({ role: m.role, content: m.content })), temperature: 0.7, max_tokens: 600 })
+        body: JSON.stringify({ model: modelToUse, messages: sessions[sid].map(m => ({ role: m.role, content: m.content })), temperature: 0.7, max_tokens: 600 })
       });
       if (!resp.ok) {
-        const txt = await resp.text();
+        const txt = await resp.text().catch(() => '');
         console.error('OpenAI non-streaming error', resp.status, txt);
         throw new Error('OpenAI non-streaming request failed');
       }
@@ -250,6 +292,22 @@ app.delete('/auth/delete', async (req: express.Request, res: express.Response) =
   return res.json({ ok: true });
 });
 
+// Admin status endpoint (safe: does not expose API key)
+app.get('/admin/openai-status', async (req: express.Request, res: express.Response) => {
+  return res.json({ enabled: hasOpenAI, model: OPENAI_MODEL, envPath: _envLoadedFrom || null });
+});
+
+// Session model preference endpoint
+app.post('/session/model', async (req: express.Request, res: express.Response) => {
+  const { model } = req.body || {};
+  const sid = await getSessionId(req, res);
+  const prefs = await readPrefs();
+  prefs[sid] = prefs[sid] || {};
+  prefs[sid].model = model;
+  await writePrefs(prefs);
+  return res.json({ ok: true, model });
+});
+
 // POST /api/stream -> streams incremental tokens to client by proxying OpenAI stream
 app.post('/api/stream', async (req: express.Request, res: express.Response) => {
   const { message } = req.body || {};
@@ -262,6 +320,22 @@ app.post('/api/stream', async (req: express.Request, res: express.Response) => {
 
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.setHeader('X-Accel-Buffering', 'no');
+
+  // rate limit similar to non-streaming endpoint
+  const prefs = await readPrefs();
+  const pref = prefs[sid] || { requests: [] };
+  const now = Date.now();
+  const windowMs = 24 * 60 * 60 * 1000;
+  pref.requests = (pref.requests || []).filter((t: number) => now - t < windowMs);
+  const limit = parseInt(process.env.SESSION_DAILY_LIMIT || '200', 10);
+  if (pref.requests.length >= limit) {
+    res.statusCode = 429;
+    res.write('rate_limited');
+    return res.end();
+  }
+  pref.requests.push(now);
+  prefs[sid] = pref;
+  await writePrefs(prefs);
 
   if (!hasOpenAI) {
     // Simulate streaming using fallback responder
@@ -314,13 +388,18 @@ app.post('/api/stream', async (req: express.Request, res: express.Response) => {
 
   try {
     // Make streaming request to OpenAI
+    // respect session preferred model if present for streaming too
+    const prefsAll = await readPrefs();
+    const sessionPref = prefsAll[sid] || {};
+    const modelToUseStream = sessionPref.model || OPENAI_MODEL;
+
     const resp = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${OPENAI_KEY}`
       },
-      body: JSON.stringify({ model: OPENAI_MODEL, messages: sessions[sid].map(m => ({ role: m.role, content: m.content })), temperature: 0.7, max_tokens: 600, stream: true })
+      body: JSON.stringify({ model: modelToUseStream, messages: sessions[sid].map(m => ({ role: m.role, content: m.content })), temperature: 0.7, max_tokens: 600, stream: true })
     });
 
     if (!resp.ok || !resp.body) {
@@ -402,6 +481,8 @@ app.post('/api/session/clear', async (req: express.Request, res: express.Respons
 
 (async () => {
   await ensureSessionsFile();
+  await ensureUsersFile();
+  await ensurePrefsFile();
   app.listen(PORT, () => {
     console.log(`Novachat (TypeScript) server running on http://localhost:${PORT}`);
     if (hasOpenAI) console.log('OpenAI enabled.');

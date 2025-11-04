@@ -14,3 +14,10 @@ export type User = {
 };
 
 export type Users = Record<string, User>;
+
+export type SessionPref = {
+  model?: string;
+  requests?: number[]; // timestamps (ms) of requests for rate limiting
+};
+
+export type SessionPrefs = Record<string, SessionPref>;
