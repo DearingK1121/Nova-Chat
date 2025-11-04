@@ -8,10 +8,21 @@ import path from 'path';
 import { Message, Sessions, User, Users } from './types';
 import bcrypt from 'bcryptjs';
 
-// Load environment variables. Many users keep .env in the project root, but
-// if your .env is inside `src/` (as in your setup), prefer that path so the
-// dev server picks up the key correctly.
-dotenv.config({ path: path.resolve(process.cwd(), 'src', '.env') });
+// Load environment variables from common locations. Try (in order): root .env,
+// src/.env. This makes the server more forgiving about where the user stores
+// their .env file.
+let _envLoadedFrom: string | null = null;
+try {
+  const r = dotenv.config();
+  if (r.parsed) {
+    _envLoadedFrom = path.resolve(process.cwd(), '.env');
+  } else {
+    const r2 = dotenv.config({ path: path.resolve(process.cwd(), 'src', '.env') });
+    if (r2.parsed) _envLoadedFrom = path.resolve(process.cwd(), 'src', '.env');
+  }
+} catch (e) {
+  // ignore and proceed; we'll log below whether a key was found
+}
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
