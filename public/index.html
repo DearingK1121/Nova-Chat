@@ -1,89 +1,340 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Welcome to Firebase Hosting</title>
 
-    <!-- update the version number as needed -->
-    <script defer src="/__/firebase/12.5.0/firebase-app-compat.js"></script>
-    <!-- include only the Firebase features as you need -->
-    <script defer src="/__/firebase/12.5.0/firebase-auth-compat.js"></script>
-    <script defer src="/__/firebase/12.5.0/firebase-database-compat.js"></script>
-    <script defer src="/__/firebase/12.5.0/firebase-firestore-compat.js"></script>
-    <script defer src="/__/firebase/12.5.0/firebase-functions-compat.js"></script>
-    <script defer src="/__/firebase/12.5.0/firebase-messaging-compat.js"></script>
-    <script defer src="/__/firebase/12.5.0/firebase-storage-compat.js"></script>
-    <script defer src="/__/firebase/12.5.0/firebase-analytics-compat.js"></script>
-    <script defer src="/__/firebase/12.5.0/firebase-remote-config-compat.js"></script>
-    <script defer src="/__/firebase/12.5.0/firebase-performance-compat.js"></script>
-    <!-- 
-      initialize the SDK after all desired features are loaded, set useEmulator to false
-      to avoid connecting the SDK to running emulators.
-    -->
-    <script defer src="/__/firebase/init.js?useEmulator=true"></script>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nova Chat</title>
+  <style>
+    :root {
+      --bg: #343541;
+      --sidebar-bg: #202123;
+      --input-bg: #40414f;
+      --user-msg: #2b2c36;
+      --ai-msg: #444654;
+      --text-color: #ececf1;
+      --accent: #19c37d;
+    }
 
-    <style media="screen">
-      body { background: #ECEFF1; color: rgba(0,0,0,0.87); font-family: Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; }
-      #message { background: white; max-width: 360px; margin: 100px auto 16px; padding: 32px 24px; border-radius: 3px; }
-      #message h2 { color: #ffa100; font-weight: bold; font-size: 16px; margin: 0 0 8px; }
-      #message h1 { font-size: 22px; font-weight: 300; color: rgba(0,0,0,0.6); margin: 0 0 16px;}
-      #message p { line-height: 140%; margin: 16px 0 24px; font-size: 14px; }
-      #message a { display: block; text-align: center; background: #039be5; text-transform: uppercase; text-decoration: none; color: white; padding: 16px; border-radius: 4px; }
-      #message, #message a { box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24); }
-      #load { color: rgba(0,0,0,0.4); text-align: center; font-size: 13px; }
-      @media (max-width: 600px) {
-        body, #message { margin-top: 0; background: white; box-shadow: none; }
-        body { border-top: 16px solid #ffa100; }
-      }
-    </style>
-  </head>
-  <body>
-    <div id="message">
-      <h2>Welcome</h2>
-      <h1>Firebase Hosting Setup Complete</h1>
-      <p>You're seeing this because you've successfully setup Firebase Hosting. Now it's time to go build something extraordinary!</p>
-      <a target="_blank" href="https://firebase.google.com/docs/hosting/">Open Hosting Documentation</a>
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  height: 100vh;
+  display: flex;
+  background: var(--bg);
+  color: var(--text-color);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+/* Sidebar */
+.sidebar {
+  width: 250px;
+  background: var(--sidebar-bg);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: width 0.3s ease;
+}
+.sidebar.hidden { width: 0; overflow: hidden; }
+.sidebar-header { padding: 1rem; font-weight: bold; border-bottom: 1px solid #2f3035; }
+.chat-list { flex: 1; overflow-y: auto; padding: 1rem; }
+.chat-list button {
+  display: block;
+  width: 100%;
+  background: none;
+  color: var(--text-color);
+  border: none;
+  text-align: left;
+  padding: 0.5rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  position: relative;
+}
+.chat-list button:hover { background: #2f3035; }
+.chat-list span.delete-btn {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+.sidebar-footer {
+  padding: 1rem;
+  border-top: 1px solid #2f3035;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.sidebar-footer button {
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 0.5rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.2s;
+}
+.sidebar-footer button:hover { background: #15a76d; }
+
+/* Main */
+.main { flex: 1; display: flex; flex-direction: column; }
+.header {
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1rem;
+  background: var(--sidebar-bg);
+  border-bottom: 1px solid #2f3035;
+}
+.toggle-btn {
+  background: none;
+  color: var(--text-color);
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+.chat-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.message {
+  max-width: 90%;
+  padding: 0.8rem 1rem;
+  border-radius: 0.6rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.user { align-self: flex-end; background: var(--user-msg); }
+.ai { align-self: flex-start; background: var(--ai-msg); }
+.input-bar {
+  display: flex;
+  align-items: center;
+  background: var(--input-bg);
+  padding: 0.75rem 1rem;
+  border-top: 1px solid #565869;
+}
+.input-bar input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-color);
+  font-size: 1rem;
+}
+.input-bar button {
+  background: var(--accent);
+  border: none;
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 0.4rem;
+  margin-left: 0.5rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.input-bar button:hover { background: #15a76d; }
+
+  </style>
+</head>
+<body>
+  <div class="sidebar" id="sidebar">
+    <div>
+      <div class="sidebar-header">Nova Chat</div>
+      <div class="chat-list" id="chatList">
+        <!-- Chat buttons dynamically generated here -->
+      </div>
     </div>
-    <p id="load">Firebase SDK Loading&hellip;</p>
+    <div class="sidebar-footer">
+      <button id="signInBtn">Sign In</button>
+      <button id="signUpBtn">Sign Up</button>
+      <button id="logoutBtn" style="display:none;">Log Out</button>
+    </div>
+  </div>
 
-    <script>
-      document.addEventListener('DOMContentLoaded', function() {
-        const loadEl = document.querySelector('#load');
-        // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
-        // // The Firebase SDK is initialized and available here!
-        //
-        // firebase.auth().onAuthStateChanged(user => { });
-        // firebase.database().ref('/path/to/ref').on('value', snapshot => { });
-        // firebase.firestore().doc('/foo/bar').get().then(() => { });
-        // firebase.functions().httpsCallable('yourFunction')().then(() => { });
-        // firebase.messaging().requestPermission().then(() => { });
-        // firebase.storage().ref('/path/to/ref').getDownloadURL().then(() => { });
-        // firebase.analytics(); // call to activate
-        // firebase.analytics().logEvent('tutorial_completed');
-        // firebase.performance(); // call to activate
-        //
-        // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
+  <div class="main">
+    <div class="header">
+      <button class="toggle-btn" id="toggleSidebar">☰</button>
+      <div>Chat</div>
+    </div>
 
-        try {
-          let app = firebase.app();
-          let features = [
-            'auth', 
-            'database', 
-            'firestore',
-            'functions',
-            'messaging', 
-            'storage', 
-            'analytics', 
-            'remoteConfig',
-            'performance',
-          ].filter(feature => typeof app[feature] === 'function');
-          loadEl.textContent = `Firebase SDK loaded with ${features.join(', ')}`;
-        } catch (e) {
-          console.error(e);
-          loadEl.textContent = 'Error loading the Firebase SDK, check the console.';
-        }
+```
+<div class="chat-container" id="chat"></div>
+
+<div class="input-bar">
+  <input id="user-input" type="text" placeholder="Send a message..." />
+  <button id="send-btn">Send</button>
+</div>
+```
+
+  </div>
+
+  <!-- Firebase + Chat Logic -->
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+    import { 
+      getAuth, 
+      createUserWithEmailAndPassword, 
+      signInWithEmailAndPassword, 
+      signOut 
+    } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAjcBIMpHFrjjUVwgkQb02-9qAvTfNFwQs",
+      authDomain: "nova-chat-df0ea.firebaseapp.com",
+      projectId: "nova-chat-df0ea",
+      storageBucket: "nova-chat-df0ea.firebasestorage.app",
+      messagingSenderId: "1089348603019",
+      appId: "1:1089348603019:web:4efa2d13385b3803a8d88e",
+      measurementId: "G-S85DTEMY77"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+
+    const sidebar = document.getElementById('sidebar');
+    const toggleSidebar = document.getElementById('toggleSidebar');
+    const chatContainer = document.getElementById('chat');
+    const input = document.getElementById('user-input');
+    const sendBtn = document.getElementById('send-btn');
+    const signInBtn = document.getElementById('signInBtn');
+    const signUpBtn = document.getElementById('signUpBtn');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const chatList = document.getElementById('chatList');
+
+    toggleSidebar.onclick = () => sidebar.classList.toggle('hidden');
+
+    // Chat management
+    let chats = [];
+    let currentChatId = null;
+
+    function renderChatList() {
+      chatList.innerHTML = '<button id="newChatBtn">+ New Chat</button>';
+
+      chats.forEach(chatItem => {
+        const btn = document.createElement('button');
+        btn.textContent = chatItem.name;
+        btn.onclick = () => loadChat(chatItem.id);
+
+        const delBtn = document.createElement('span');
+        delBtn.textContent = '🗑';
+        delBtn.className = 'delete-btn';
+        delBtn.onclick = (e) => {
+          e.stopPropagation();
+          deleteChat(chatItem.id);
+        };
+
+        btn.appendChild(delBtn);
+        chatList.appendChild(btn);
       });
-    </script>
-  </body>
+
+      document.getElementById('newChatBtn').onclick = createNewChat;
+    }
+
+    function createNewChat() {
+      const id = Date.now().toString();
+      const name = `Chat ${chats.length + 1}`;
+      chats.push({ id, name, messages: [] });
+      renderChatList();
+      loadChat(id);
+    }
+
+    function loadChat(id) {
+      currentChatId = id;
+      chatContainer.innerHTML = "";
+      const chatObj = chats.find(c => c.id === id);
+      chatObj.messages.forEach(m => addMessageToContainer(m.text, m.sender));
+    }
+
+    function addMessageToContainer(text, sender) {
+      const div = document.createElement('div');
+      div.className = `message ${sender}`;
+      div.textContent = text;
+      chatContainer.appendChild(div);
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+
+    function addMessage(text, sender) {
+      if (!currentChatId) return alert('Select a chat first!');
+      const chatObj = chats.find(c => c.id === currentChatId);
+      chatObj.messages.push({ text, sender });
+      addMessageToContainer(text, sender);
+    }
+
+    function deleteChat(id) {
+      if (confirm("Delete this chat?")) {
+        chats = chats.filter(c => c.id !== id);
+        if (currentChatId === id) {
+          currentChatId = null;
+          chatContainer.innerHTML = '';
+        }
+        renderChatList();
+      }
+    }
+
+    sendBtn.onclick = () => {
+      const text = input.value.trim();
+      if (!text) return;
+      addMessage(text, 'user');
+      input.value = '';
+      setTimeout(() => {
+        setTimeout(() => {
+          addMessage("AI: You said \"" + text + "\"", 'ai');
+        }, 400);
+      }, 400);
+
+    };
+
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') sendBtn.click(); });
+
+    // Firebase Auth Logic
+    signUpBtn.onclick = async () => {
+      const email = prompt("Email:");
+      const password = prompt("Password:");
+      try {
+        await createUserWithEmailAndPassword(auth, email, password);
+        alert("Account created! Please log back in and start chatting!");
+      } catch (err) {
+        alert(err.message);
+      }
+    };
+
+    signInBtn.onclick = async () => {
+      const email = prompt("Email:");
+      const password = prompt("Password:");
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+        alert("Signed in!");
+        signInBtn.style.display = "none";
+        signUpBtn.style.display = "none";
+        logoutBtn.style.display = "block";
+      } catch (err) {
+        alert(err.message);
+      }
+    };
+
+    logoutBtn.onclick = async () => {
+      try {
+        await signOut(auth);
+        alert("Logged out!");
+        signInBtn.style.display = "block";
+        signUpBtn.style.display = "block";
+        logoutBtn.style.display = "none";
+      } catch (err) {
+        alert(err.message);
+      }
+    };
+
+    // Initialize
+    renderChatList();
+  </script>
+
+</body>
 </html>
