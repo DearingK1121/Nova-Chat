@@ -1,28 +1,3 @@
 {
-  "2742b836-aef2-4974-b3e1-9e1e7c44f156": [
-    {
-      "role": "user",
-      "content": "Hello"
-    },
-    {
-      "role": "assistant",
-      "content": "Hello! I'm Novachat — how can I help today?"
-    },
-    {
-      "role": "user",
-      "content": "What's the weather?"
-    },
-    {
-      "role": "assistant",
-      "content": "That's a great question — here's a friendly thought: What's the weather?"
-    },
-    {
-      "role": "user",
-      "content": "can you remember my name"
-    },
-    {
-      "role": "assistant",
-      "content": "Novachat echo: can you remember my name"
-    }
-  ]
+  "2742b836-aef2-4974-b3e1-9e1e7c44f156": []
 }
